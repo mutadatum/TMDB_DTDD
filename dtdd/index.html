@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Does killing the dog kill the box office? — mutadatum</title>
+  <meta name="description" content="A data exploration of whether dog deaths in films correlate with box office performance." />
+  <link rel="stylesheet" href="../shared.css" />
+  <script src="https://cdn.plot.ly/plotly-2.32.0.min.js"></script>
+  <script src="../content.js"></script>
+
+  <style>
+    /* ── Find this page's config from content.js ── */
+
+    .hero { padding: 3.5rem 0 2rem; border-bottom: 1px solid var(--rule); }
+
+    h1 {
+      font-family: var(--serif);
+      font-size: clamp(1.8rem, 4vw, 3rem);
+      font-weight: normal;
+      line-height: 1.15;
+      max-width: 28ch;
+      margin-bottom: 1.25rem;
+    }
+    h1 em { font-style: italic; color: #c0392b; }
+    .lede { font-size: 1.05rem; color: var(--ink-mid); max-width: 60ch; line-height: 1.75; }
+
+    /* ── Stats strip ── */
+    .stats-strip {
+      display: flex; gap: 2.5rem;
+      padding: 1.5rem 0; border-bottom: 1px solid var(--rule); flex-wrap: wrap;
+    }
+    .stat-value {
+      font-family: var(--mono); font-size: 1.5rem; font-weight: bold;
+      color: var(--ink); display: block;
+    }
+    .stat-label {
+      font-size: 0.75rem; color: var(--ink-faint);
+      text-transform: uppercase; letter-spacing: 0.08em;
+    }
+
+    /* ── Controls ── */
+    .controls {
+      display: flex; gap: 1rem; align-items: center;
+      flex-wrap: wrap; padding: 1.25rem 0; border-bottom: 1px solid var(--rule);
+    }
+    .control-label {
+      font-size: 0.78rem; font-family: var(--mono);
+      color: var(--ink-mid); text-transform: uppercase; letter-spacing: 0.08em;
+    }
+    .btn-group { display: flex; }
+    .btn {
+      padding: 0.35rem 0.85rem; font-size: 0.8rem; font-family: var(--mono);
+      border: 1px solid var(--ink); background: transparent;
+      color: var(--ink); cursor: pointer; transition: background 0.15s, color 0.15s;
+    }
+    .btn:first-child { border-radius: 3px 0 0 3px; }
+    .btn:last-child  { border-radius: 0 3px 3px 0; }
+    .btn + .btn { border-left: none; }
+    .btn.active, .btn:hover { background: var(--ink); color: var(--paper); }
+
+    /* ── Chart ── */
+    .chart-wrap { padding: 1.5rem 0; border-bottom: 1px solid var(--rule); }
+    #chart { width: 100%; height: 520px; }
+    #status {
+      font-family: var(--mono); font-size: 0.85rem;
+      color: var(--ink-mid); padding: 3rem 0; text-align: center;
+    }
+
+    /* ── Legend ── */
+    .legend { display: flex; gap: 1.5rem; padding: 0.75rem 0 1.25rem; flex-wrap: wrap; }
+    .legend-item { display: flex; align-items: center; gap: 0.4rem; font-size: 0.82rem; color: var(--ink-mid); }
+    .legend-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+
+    /* ── Methodology ── */
+    .methodology { padding: 2rem 0; border-top: 1px solid var(--rule); }
+    .methodology h2 {
+      font-family: var(--mono); font-size: 0.75rem; text-transform: uppercase;
+      letter-spacing: 0.12em; color: var(--ink-faint); margin-bottom: 1rem;
+    }
+    .methodology p {
+      font-size: 0.88rem; color: var(--ink-mid);
+      max-width: 68ch; margin-bottom: 0.6rem; line-height: 1.7;
+    }
+    .methodology a { color: var(--accent); }
+
+    @media (max-width: 600px) {
+      h1 { font-size: 1.7rem; }
+      #chart { height: 380px; }
+    }
+  </style>
+</head>
+<body>
+
+<header class="masthead">
+  <div class="container">
+    <div class="masthead-inner">
+      <a class="site-name" href="/">muta<span>datum</span></a>
+      <span class="site-tagline" id="site-tagline"></span>
+    </div>
+  </div>
+</header>
+
+<main>
+  <div class="container">
+
+    <section class="hero">
+      <p class="eyebrow" id="page-eyebrow"></p>
+      <h1 id="page-title"></h1>
+      <p class="lede" id="page-lede"></p>
+    </section>
+
+    <div class="stats-strip">
+      <div class="stat">
+        <span class="stat-value" id="stat-total">—</span>
+        <span class="stat-label">Films analysed</span>
+      </div>
+      <div class="stat">
+        <span class="stat-value" id="stat-yes">—</span>
+        <span class="stat-label">Dog dies (≥70% confidence)</span>
+      </div>
+      <div class="stat">
+        <span class="stat-value" id="stat-no">—</span>
+        <span class="stat-label">Dog survives (≤30% confidence)</span>
+      </div>
+      <div class="stat">
+        <span class="stat-value" id="stat-r">—</span>
+        <span class="stat-label">Pearson r (correlation)</span>
+      </div>
+    </div>
+
+    <div class="controls">
+      <span class="control-label">X-axis</span>
+      <div class="btn-group">
+        <button class="btn active" onclick="setScale('log')">Log</button>
+        <button class="btn" onclick="setScale('linear')">Linear</button>
+      </div>
+      <span class="control-label" style="margin-left:1rem;">Filter</span>
+      <div class="btn-group">
+        <button class="btn active" onclick="setFilter('all')">All</button>
+        <button class="btn" onclick="setFilter('yes')">Dog dies</button>
+        <button class="btn" onclick="setFilter('no')">Dog lives</button>
+      </div>
+    </div>
+
+    <div class="chart-wrap">
+      <div id="status">Loading data…</div>
+      <div id="chart" style="display:none;"></div>
+    </div>
+
+    <div class="legend">
+      <div class="legend-item">
+        <div class="legend-dot" style="background:#c0392b;"></div>
+        Dog dies (≥70% of voters say yes)
+      </div>
+      <div class="legend-item">
+        <div class="legend-dot" style="background:#2980b9;"></div>
+        Dog lives (≤30% say yes)
+      </div>
+      <div class="legend-item">
+        <div class="legend-dot" style="background:#8e7bb5;"></div>
+        Uncertain (31–69%)
+      </div>
+    </div>
+
+    <section class="methodology">
+      <h2>Methodology &amp; sources</h2>
+      <p id="method-p1"></p>
+      <p id="method-p2"></p>
+      <p>Data refreshes every Sunday via GitHub Actions.
+        <a href="/data/movies.json" download>Download the dataset (JSON)</a>.
+      </p>
+    </section>
+
+  </div>
+</main>
+
+<footer>
+  <div class="container">
+    <span id="footer-left"></span>
+    <span id="footer-right"></span>
+  </div>
+</footer>
+
+<script>
+  // ── Pull this page's config from content.js ───────────────────────────────
+  const PAGE = SITE.pages.find(p => p.slug === 'dtdd');
+
+  document.getElementById('site-tagline').textContent = SITE.tagline;
+  document.getElementById('page-eyebrow').textContent = PAGE.eyebrow;
+  document.getElementById('page-title').innerHTML     = PAGE.title.replace('kill', '<em>kill</em>');
+  document.getElementById('page-lede').textContent    = PAGE.description;
+  document.getElementById('footer-left').innerHTML    = SITE.footer.left;
+  document.getElementById('footer-right').innerHTML   = SITE.footer.right;
+  document.title = `${PAGE.title} — ${SITE.name}`;
+
+  document.getElementById('method-p1').innerHTML =
+    `Box office and film metadata come from the ` +
+    `<a href="https://www.themoviedb.org/" target="_blank" rel="noopener">TMDB API</a>, ` +
+    `filtered to films with a reported worldwide gross above $1 million USD. ` +
+    `Dog-death confidence scores come from the ` +
+    `<a href="https://www.doesthedogdie.com/" target="_blank" rel="noopener">DoesTheDogDie.com API</a> ` +
+    `(free tier, attribution required), filtered to films with at least 20 community votes on the "dogs dying" topic.`;
+
+  document.getElementById('method-p2').textContent =
+    `Each point represents one film. Colour encodes the dog-death confidence score: ` +
+    `red (≥70%) means the community is confident a dog dies; blue (≤30%) means it doesn't; ` +
+    `violet is uncertain. Point size encodes the number of DTDD votes — larger means more community confidence. ` +
+    `X-axis shows worldwide gross; Y-axis shows the percentage of voters who said "yes, the dog dies." ` +
+    `Log scale is recommended as revenue is heavily right-skewed. ` +
+    `Pearson r measures linear correlation between log₁₀(revenue) and dog-death percentage.`;
+
+  // ── Chart logic ───────────────────────────────────────────────────────────
+  let allMovies = [];
+  let currentScale = 'log';
+  let currentFilter = 'all';
+
+  const classify = pct => pct >= 70 ? 'yes' : pct <= 30 ? 'no' : 'maybe';
+  const colour   = pct => ({ yes: '#c0392b', no: '#2980b9', maybe: '#8e7bb5' })[classify(pct)];
+
+  function pearson(xs, ys) {
+    const n = xs.length;
+    if (n < 2) return null;
+    const mx = xs.reduce((a,b)=>a+b,0)/n, my = ys.reduce((a,b)=>a+b,0)/n;
+    let num=0, dx2=0, dy2=0;
+    for (let i=0;i<n;i++) { const dx=xs[i]-mx, dy=ys[i]-my; num+=dx*dy; dx2+=dx*dx; dy2+=dy*dy; }
+    return num/Math.sqrt(dx2*dy2);
+  }
+
+  function updateStats(movies) {
+    document.getElementById('stat-total').textContent = movies.length.toLocaleString();
+    document.getElementById('stat-yes').textContent   = movies.filter(m=>classify(m.dog_dies_pct)==='yes').length.toLocaleString();
+    document.getElementById('stat-no').textContent    = movies.filter(m=>classify(m.dog_dies_pct)==='no').length.toLocaleString();
+    const r = pearson(movies.map(m=>Math.log10(m.revenue)), movies.map(m=>m.dog_dies_pct));
+    document.getElementById('stat-r').textContent = r !== null ? r.toFixed(3) : '—';
+  }
+
+  function buildChart(movies) {
+    const data = currentFilter === 'all' ? movies : movies.filter(m=>classify(m.dog_dies_pct)===currentFilter);
+    Plotly.react('chart', [{
+      type: 'scatter', mode: 'markers',
+      x: data.map(m=>m.revenue),
+      y: data.map(m=>m.dog_dies_pct),
+      text: data.map(m=>
+        `<b>${m.title}</b> (${m.year})<br>` +
+        `Box office: $${(m.revenue/1e6).toFixed(1)}M<br>` +
+        `Dog dies: ${m.dog_dies_pct}% (${m.total_votes} votes)<br>` +
+        `Genre: ${(m.genres||[]).join(', ')}`),
+      hovertemplate: '%{text}<extra></extra>',
+      marker: {
+        color: data.map(m=>colour(m.dog_dies_pct)),
+        size:  data.map(m=>Math.min(18, Math.max(6, Math.sqrt(m.total_votes)*0.9))),
+        opacity: 0.75,
+        line: { color: 'rgba(255,255,255,0.4)', width: 0.5 }
+      }
+    }], {
+      paper_bgcolor: 'transparent', plot_bgcolor: 'transparent',
+      font: { family: '"JetBrains Mono","Courier New",monospace', size: 11, color: '#4a4a6a' },
+      xaxis: {
+        title: { text: 'Worldwide Box Office Gross (USD)', standoff: 12 },
+        type: currentScale, tickprefix: '$', gridcolor: '#ddddd5',
+        linecolor: '#1a1a2e', zeroline: false,
+      },
+      yaxis: {
+        title: { text: 'Dog Dies — Community Confidence (%)', standoff: 12 },
+        range: [-5, 105], gridcolor: '#ddddd5',
+        linecolor: '#1a1a2e', zeroline: false, ticksuffix: '%',
+      },
+      hoverlabel: { bgcolor: '#1a1a2e', bordercolor: '#1a1a2e', font: { color: '#f7f6f2', size: 12 } },
+      margin: { t: 20, r: 20, b: 60, l: 70 },
+    }, { responsive: true, displayModeBar: true, displaylogo: false,
+         modeBarButtonsToRemove: ['select2d','lasso2d','autoScale2d'] });
+  }
+
+  function setScale(scale) {
+    currentScale = scale;
+    document.querySelectorAll('.controls .btn-group:first-of-type .btn')
+      .forEach(b => b.classList.toggle('active', b.textContent.toLowerCase().startsWith(scale)));
+    buildChart(allMovies);
+  }
+
+  function setFilter(filter) {
+    currentFilter = filter;
+    document.querySelectorAll('.controls .btn-group:last-of-type .btn')
+      .forEach(b => b.classList.toggle('active', b.textContent.toLowerCase().includes(filter) || (filter==='all' && b.textContent==='All')));
+    buildChart(allMovies);
+  }
+
+  async function init() {
+    try {
+      const res = await fetch('/data/movies.json');
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      allMovies = await res.json();
+      document.getElementById('status').style.display = 'none';
+      document.getElementById('chart').style.display  = 'block';
+      updateStats(allMovies);
+      buildChart(allMovies);
+    } catch (err) {
+      document.getElementById('status').textContent =
+        `Couldn't load data: ${err.message}. If running locally, try: python -m http.server`;
+    }
+  }
+
+  init();
+</script>
+
+</body>
+</html>
